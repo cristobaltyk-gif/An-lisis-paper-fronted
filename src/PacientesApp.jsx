@@ -410,5 +410,4 @@ export default function PacientesApp() {
       </main>
     </div>
   )
-              }
-          
+}
