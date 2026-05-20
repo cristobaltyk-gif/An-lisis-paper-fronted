@@ -31,3 +31,61 @@ export async function analyzeByText(text, doi = null) {
   }
   return r.json()
 }
+
+/**
+ * Consulta para pacientes — pipeline completo con streaming SSE
+ * search → analyze x3 → respuesta en lenguaje simple
+ *
+ * @param {string} query - diagnóstico del paciente
+ * @param {object} callbacks
+ *   onPapersMeta(papers)  - cuando lleguen los papers analizados
+ *   onText(chunk)         - cada chunk de texto de la respuesta
+ *   onSearching()         - inicio búsqueda
+ *   onAnalyzing()         - inicio análisis
+ */
+export async function pacientesQuery(query, { onPapersMeta, onText, onSearching, onAnalyzing } = {}) {
+  onSearching?.()
+
+  const r = await fetch(`${BASE}/pacientes/chat`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ query }),
+  })
+
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || `Error ${r.status}`)
+  }
+
+  const reader = r.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() // último fragmento incompleto
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const raw = line.slice(6).trim()
+      if (raw === '[DONE]') return
+
+      try {
+        const parsed = JSON.parse(raw)
+
+        if (parsed.type === 'papers_meta') {
+          onAnalyzing?.()
+          onPapersMeta?.(parsed.papers)
+        } else if (parsed.type === 'text') {
+          onText?.(parsed.text)
+        }
+      } catch {
+        // chunk inválido, ignorar
+      }
+    }
+  }
+}
