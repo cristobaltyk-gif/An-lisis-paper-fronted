@@ -31,32 +31,32 @@ function getConfiabilidad(score) {
   if (score === null || score === undefined) return null
   if (score >= 75) return {
     emoji: '🟢',
-    label: 'Muy confiable',
-    sub: 'Estudios de alta calidad lo respaldan',
+    label: 'La ciencia lo respalda bien',
+    sub: 'Muchos estudios de calidad coinciden en esto',
     color: '#16a085',
     bg: '#e6f7f3',
     border: '#b7dfc9',
   }
   if (score >= 50) return {
     emoji: '🟡',
-    label: 'Moderadamente confiable',
-    sub: 'Hay evidencia con algunas limitaciones',
+    label: 'Hay evidencia, pero no es definitiva',
+    sub: 'Algunos estudios lo apoyan, con ciertas limitaciones',
     color: '#b7800a',
     bg: '#fffbeb',
     border: '#fde68a',
   }
   if (score >= 30) return {
     emoji: '🟠',
-    label: 'Evidencia limitada',
-    sub: 'Pocos estudios o calidad moderada',
+    label: 'Pocos estudios disponibles',
+    sub: 'El tema no está muy investigado aún',
     color: '#c05621',
     bg: '#fff7ed',
     border: '#fed7aa',
   }
   return {
     emoji: '🔴',
-    label: 'Evidencia insuficiente',
-    sub: 'Tema poco estudiado en la literatura',
+    label: 'Casi sin evidencia científica',
+    sub: 'Muy pocos o ningún estudio confiable disponible',
     color: '#dc2626',
     bg: '#fef2f2',
     border: '#fecaca',
