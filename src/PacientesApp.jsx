@@ -68,39 +68,40 @@ function ConfiabilidadBadge({ score }) {
   if (!info) return null
   return (
     <div style={{
-      background: info.bg,
-      border: `1.5px solid ${info.border}`,
-      borderRadius: 14,
-      padding: '14px 18px',
+      background: info.color,
+      borderRadius: 16,
+      padding: '18px 20px',
       display: 'flex',
       alignItems: 'center',
-      gap: 14,
+      gap: 16,
       marginBottom: '1rem',
+      boxShadow: `0 4px 16px ${info.color}55`,
     }}>
-      <span style={{ fontSize: '1.8rem', lineHeight: 1 }}>{info.emoji}</span>
+      <span style={{ fontSize: '2.8rem', lineHeight: 1 }}>{info.emoji}</span>
       <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 700, color: info.color, fontSize: '.95rem' }}>
+        <div style={{ fontWeight: 900, color: 'white', fontSize: '1.15rem', lineHeight: 1.2 }}>
           {info.label}
         </div>
-        <div style={{ fontSize: '.78rem', color: '#64748b', marginTop: 2 }}>
+        <div style={{ fontSize: '.82rem', color: 'rgba(255,255,255,.8)', marginTop: 4 }}>
           {info.sub}
         </div>
       </div>
       <div style={{
-        width: 48,
-        height: 48,
+        width: 60,
+        height: 60,
         borderRadius: '50%',
-        border: `3px solid ${info.color}`,
+        background: 'rgba(255,255,255,.25)',
+        border: '2px solid rgba(255,255,255,.6)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
       }}>
-        <span style={{ fontSize: '1rem', fontWeight: 800, color: info.color, lineHeight: 1 }}>
+        <span style={{ fontSize: '1.3rem', fontWeight: 900, color: 'white', lineHeight: 1 }}>
           {score}
         </span>
-        <span style={{ fontSize: '.5rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+        <span style={{ fontSize: '.55rem', color: 'rgba(255,255,255,.7)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
           / 100
         </span>
       </div>
