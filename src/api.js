@@ -32,17 +32,6 @@ export async function analyzeByText(text, doi = null) {
   return r.json()
 }
 
-/**
- * Consulta para pacientes — pipeline completo con streaming SSE
- * search → analyze x3 → respuesta en lenguaje simple
- *
- * @param {string} query - diagnóstico del paciente
- * @param {object} callbacks
- *   onPapersMeta(papers)  - cuando lleguen los papers analizados
- *   onText(chunk)         - cada chunk de texto de la respuesta
- *   onSearching()         - inicio búsqueda
- *   onAnalyzing()         - inicio análisis
- */
 export async function pacientesQuery(query, { onPapersMeta, onText, onSearching, onAnalyzing } = {}) {
   onSearching?.()
 
@@ -67,7 +56,7 @@ export async function pacientesQuery(query, { onPapersMeta, onText, onSearching,
 
     buffer += decoder.decode(value, { stream: true })
     const lines = buffer.split('\n')
-    buffer = lines.pop() // último fragmento incompleto
+    buffer = lines.pop()
 
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue
@@ -76,10 +65,9 @@ export async function pacientesQuery(query, { onPapersMeta, onText, onSearching,
 
       try {
         const parsed = JSON.parse(raw)
-
         if (parsed.type === 'papers_meta') {
           onAnalyzing?.()
-          onPapersMeta?.(parsed.papers)
+          onPapersMeta?.(parsed.papers, parsed.score_ponderado ?? null)
         } else if (parsed.type === 'text') {
           onText?.(parsed.text)
         }
