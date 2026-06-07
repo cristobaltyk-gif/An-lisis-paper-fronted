@@ -18,6 +18,16 @@ async function refreshScreener(stream) {
   return r.json()
 }
 
+async function searchByTopic(query, maxResults=10) {
+  const r = await fetch(`${BASE}/search`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ query, max_results: maxResults })
+  })
+  if (!r.ok) throw new Error(`Error ${r.status}`)
+  return r.json()
+}
+
 const C = {
   navy:'#0f2942', blue:'#1a6bb5', blue2:'#2980b9',
   teal:'#16a085', orange:'#e67e22', red:'#e74c3c',
@@ -54,7 +64,6 @@ function Section({icon,title,children}){
   )
 }
 
-// ── Score Badge ───────────────────────────────────────────────────
 function ScoreBadge({score}){
   const color = score>=75?C.blue:score>=50?C.teal:score>=30?C.orange:C.red
   return(
@@ -64,6 +73,146 @@ function ScoreBadge({score}){
   )
 }
 
+// ── Topic Search ──────────────────────────────────────────────────
+function TopicSearch({onAnalyze}){
+  const [query,setQuery]         = useState('')
+  const [maxResults,setMax]      = useState(10)
+  const [loading,setLoading]     = useState(false)
+  const [error,setError]         = useState('')
+  const [papers,setPapers]       = useState([])
+  const [selected,setSelected]   = useState(new Set())
+  const [analyzing,setAnalyzing] = useState(false)
+  const [progress,setProgress]   = useState('')
+
+  async function handleSearch(){
+    if(query.trim().length<3) return
+    setLoading(true); setError(''); setPapers([]); setSelected(new Set())
+    try{
+      const data = await searchByTopic(query.trim(), maxResults)
+      setPapers(data.papers||[])
+      if((data.papers||[]).length===0) setError('No se encontraron resultados.')
+    }catch(e){ setError(e.message) }
+    finally{ setLoading(false) }
+  }
+
+  function toggleSelect(pmid){
+    setSelected(prev=>{
+      const next=new Set(prev)
+      next.has(pmid)?next.delete(pmid):next.add(pmid)
+      return next
+    })
+  }
+
+  async function analyzeSelected(){
+    const toAnalyze = papers.filter(p=>selected.has(p.pmid))
+    if(!toAnalyze.length) return
+    setAnalyzing(true)
+    const list=[]
+    for(let i=0;i<toAnalyze.length;i++){
+      const paper=toAnalyze[i]
+      setProgress(`Analizando ${i+1} de ${toAnalyze.length}: ${paper.title.slice(0,40)}...`)
+      try{
+        const result=paper.doi
+          ? await analyzeByDoi(paper.doi)
+          : await analyzeByText(`Title: ${paper.title}\nAuthors: ${paper.authors}\nJournal: ${paper.journal} (${paper.year})\nPMID: ${paper.pmid}`)
+        list.push(result)
+      }catch(e){ console.error(e.message) }
+    }
+    setAnalyzing(false); setProgress('')
+    if(list.length>0) onAnalyze(list)
+  }
+
+  const inp={width:'100%',padding:'.75rem 1rem',boxSizing:'border-box',border:'1.5px solid #e2e8f0',borderRadius:10,fontSize:'.9rem',fontFamily:"'Georgia',serif",outline:'none',color:'#1e293b',background:C.white}
+
+  return(
+    <div style={{maxWidth:700,margin:'0 auto'}}>
+      <div style={{background:C.white,borderRadius:16,padding:'1.25rem',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'1rem'}}>
+        <label style={{display:'block',fontWeight:700,color:C.navy,fontSize:'.85rem',marginBottom:8}}>Buscar por tema en PubMed</label>
+        <input
+          value={query}
+          onChange={e=>{setQuery(e.target.value);setError('')}}
+          onKeyDown={e=>e.key==='Enter'&&query.trim().length>=3&&handleSearch()}
+          placeholder="ej: total hip arthroplasty ceramic bearing, knee replacement outcomes..."
+          style={inp}
+          onFocus={e=>e.target.style.borderColor=C.blue2}
+          onBlur={e=>e.target.style.borderColor='#e2e8f0'}
+        />
+        <div style={{display:'flex',alignItems:'center',gap:12,marginTop:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}>
+            <label style={{color:C.gray,fontSize:'.8rem',whiteSpace:'nowrap'}}>Resultados:</label>
+            <select value={maxResults} onChange={e=>setMax(Number(e.target.value))}
+              style={{padding:'.4rem .7rem',border:'1.5px solid #e2e8f0',borderRadius:8,fontSize:'.85rem',color:'#1e293b',background:C.white,cursor:'pointer'}}>
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+            </select>
+          </div>
+          <button onClick={handleSearch} disabled={loading||query.trim().length<3}
+            style={{padding:'.6rem 1.5rem',border:'none',borderRadius:10,
+              background:loading||query.trim().length<3?'#94a3b8':`linear-gradient(135deg,${C.navy},${C.blue})`,
+              color:'#fff',fontWeight:700,fontSize:'.85rem',
+              cursor:loading||query.trim().length<3?'not-allowed':'pointer'}}>
+            {loading?'⏳ Buscando...':'🔎 Buscar'}
+          </button>
+        </div>
+      </div>
+
+      {error&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'.75rem 1rem',marginBottom:'1rem',color:'#dc2626',fontSize:'.85rem'}}>⚠️ {error}</div>}
+
+      {papers.length>0&&(
+        <>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'.75rem'}}>
+            <p style={{margin:0,color:C.gray,fontSize:'.85rem'}}>
+              <strong style={{color:C.navy}}>{papers.length}</strong> resultados
+              {selected.size>0&&<span style={{color:C.blue,marginLeft:12}}>· {selected.size} seleccionados</span>}
+            </p>
+            {selected.size>0&&(
+              <button onClick={analyzeSelected} disabled={analyzing}
+                style={{padding:'.5rem 1rem',border:'none',borderRadius:8,
+                  background:analyzing?'#94a3b8':`linear-gradient(135deg,${C.teal},#1abc9c)`,
+                  color:'#fff',fontWeight:700,fontSize:'.82rem',
+                  cursor:analyzing?'not-allowed':'pointer'}}>
+                {analyzing?`⚙️ ${progress||'Analizando...'}`:`🔍 Analizar ${selected.size} seleccionado${selected.size>1?'s':''}`}
+              </button>
+            )}
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:'.75rem'}}>
+            {papers.map((paper,idx)=>{
+              const isSel=selected.has(paper.pmid)
+              return(
+                <div key={paper.pmid} onClick={()=>toggleSelect(paper.pmid)}
+                  style={{background:isSel?'#eff6ff':C.white,
+                    border:`2px solid ${isSel?C.blue:'#e2e8f0'}`,
+                    borderRadius:14,padding:'1rem',cursor:'pointer',transition:'all .15s',
+                    boxShadow:isSel?'0 0 0 3px rgba(26,107,181,0.1)':'0 2px 8px rgba(0,0,0,0.04)'}}>
+                  <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
+                    <div style={{fontSize:'.72rem',color:C.gray,fontWeight:700,flexShrink:0,marginTop:2,width:20,textAlign:'center'}}>#{idx+1}</div>
+                    <div style={{width:20,height:20,borderRadius:6,flexShrink:0,marginTop:2,
+                      border:`2px solid ${isSel?C.blue:'#cbd5e1'}`,
+                      background:isSel?C.blue:'transparent',
+                      display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      {isSel&&<span style={{color:'#fff',fontSize:'.7rem',fontWeight:800}}>✓</span>}
+                    </div>
+                    <div style={{flex:1}}>
+                      <p style={{margin:'0 0 4px',fontWeight:700,color:C.navy,fontSize:'.9rem',lineHeight:1.4}}>{paper.title}</p>
+                      <p style={{margin:'0 0 8px',color:C.gray,fontSize:'.78rem'}}>{paper.authors} · <em>{paper.journal}</em> · {paper.year}</p>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        {paper.open_access&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:6,padding:'2px 8px',fontSize:'.7rem',fontWeight:700}}>✓ Open Access</span>}
+                        {paper.doi&&<span style={{background:'#e0f2fe',color:'#0369a1',borderRadius:6,padding:'2px 8px',fontSize:'.7rem',fontWeight:700}}>✓ DOI</span>}
+                        <span style={{background:'#f1f5f9',color:C.gray,borderRadius:6,padding:'2px 8px',fontSize:'.7rem'}}>PMID: {paper.pmid}</span>
+                      </div>
+                    </div>
+                    <ScoreBadge score={paper.score}/>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 // ── Screener ──────────────────────────────────────────────────────
 function Screener({onAnalyze}){
   const [stream,setStream]       = useState('cadera')
@@ -151,7 +300,6 @@ function Screener({onAnalyze}){
 
   return(
     <div style={{maxWidth:700,margin:'0 auto'}}>
-      {/* Header screener */}
       <div style={{background:C.white,borderRadius:16,padding:'1.25rem',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'1rem'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
           <div>
@@ -168,8 +316,6 @@ function Screener({onAnalyze}){
             {refreshing?'⏳ Actualizando...':'🔄 Actualizar'}
           </button>
         </div>
-
-        {/* Stream tabs */}
         <div style={{display:'flex',gap:6,background:'#f1f5f9',borderRadius:12,padding:4}}>
           {streamTab('cadera','Cadera','🦴')}
           {streamTab('rodilla','Rodilla','🦿')}
@@ -178,7 +324,6 @@ function Screener({onAnalyze}){
 
       {error && <div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'.75rem 1rem',marginBottom:'1rem',color:'#dc2626',fontSize:'.85rem'}}>⚠️ {error}</div>}
 
-      {/* Estado generating */}
       {currentData?.status === 'generating' && (
         <div style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:12,padding:'1.25rem',textAlign:'center',marginBottom:'1rem'}}>
           <p style={{margin:0,color:'#92400e',fontWeight:600}}>⚙️ Generando resultados por primera vez...</p>
@@ -186,12 +331,10 @@ function Screener({onAnalyze}){
         </div>
       )}
 
-      {/* Loading */}
       {loading[stream] && (
         <div style={{textAlign:'center',padding:'2rem',color:C.gray}}>⏳ Cargando papers...</div>
       )}
 
-      {/* Papers */}
       {!loading[stream] && papers.length > 0 && (
         <>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'.75rem'}}>
@@ -209,7 +352,6 @@ function Screener({onAnalyze}){
               </button>
             )}
           </div>
-
           <div style={{display:'flex',flexDirection:'column',gap:'.75rem'}}>
             {papers.map((paper,idx)=>{
               const isSel=selected.has(paper.pmid)
@@ -220,11 +362,7 @@ function Screener({onAnalyze}){
                     borderRadius:14,padding:'1rem',cursor:'pointer',transition:'all .15s',
                     boxShadow:isSel?'0 0 0 3px rgba(26,107,181,0.1)':'0 2px 8px rgba(0,0,0,0.04)'}}>
                   <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
-                    {/* Rank */}
-                    <div style={{fontSize:'.72rem',color:C.gray,fontWeight:700,flexShrink:0,marginTop:2,width:20,textAlign:'center'}}>
-                      #{idx+1}
-                    </div>
-                    {/* Checkbox */}
+                    <div style={{fontSize:'.72rem',color:C.gray,fontWeight:700,flexShrink:0,marginTop:2,width:20,textAlign:'center'}}>#{idx+1}</div>
                     <div style={{width:20,height:20,borderRadius:6,flexShrink:0,marginTop:2,
                       border:`2px solid ${isSel?C.blue:'#cbd5e1'}`,
                       background:isSel?C.blue:'transparent',
@@ -278,7 +416,7 @@ function InputPanel({onResult,initialMode='doi'}){
   const inp={width:'100%',padding:'.75rem 1rem',boxSizing:'border-box',border:'1.5px solid #e2e8f0',borderRadius:10,fontSize:'.9rem',fontFamily:"'Georgia',serif",outline:'none',color:'#1e293b',background:C.white}
 
   return(
-          <div style={{maxWidth:700,margin:'0 auto'}}>
+    <div style={{maxWidth:700,margin:'0 auto'}}>
       <div style={{display:'flex',gap:6,background:'#e2e8f0',borderRadius:12,padding:4,marginBottom:'1.5rem'}}>
         <button style={tabStyle(mode==='doi')} onClick={()=>{setMode('doi');setError('')}}>🔗 Por DOI</button>
         <button style={tabStyle(mode==='text')} onClick={()=>{setMode('text');setError('')}}>📝 Por Texto</button>
@@ -405,8 +543,8 @@ function ResultPanel({results,onReset}){
 
 // ── App Root ──────────────────────────────────────────────────────
 export default function App(){
-  const [view,setView]     = useState('home')
-  const [tab,setTab]       = useState('screener')
+  const [view,setView]       = useState('home')
+  const [tab,setTab]         = useState('screener')
   const [results,setResults] = useState([])
 
   function handleResults(list){setResults(list);setView('results')}
@@ -419,29 +557,4 @@ export default function App(){
   return(
     <div style={{minHeight:'100vh',background:C.light,fontFamily:"'Georgia',serif"}}>
       <div style={{background:`linear-gradient(135deg,${C.navy} 0%,#1a4a7a 60%,#0f4c81 100%)`,padding:'1.5rem 2rem',borderBottom:'4px solid #2980b9'}}>
-        <div style={{maxWidth:900,margin:'0 auto',display:'flex',alignItems:'center',gap:'1rem'}}>
-          <div style={{width:44,height:44,borderRadius:10,background:'rgba(255,255,255,.14)',border:'1px solid rgba(255,255,255,.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22}}>🔬</div>
-          <div>
-            <h1 style={{margin:0,color:'#fff',fontSize:'1.4rem',fontWeight:700}}>EvidenciaMed</h1>
-            <p style={{margin:0,color:'rgba(255,255,255,.55)',fontSize:'.68rem',letterSpacing:'2px',textTransform:'uppercase'}}>Analizador Crítico de Literatura Científica · Clever Salud / ICA</p>
-          </div>
-        </div>
-      </div>
-      <div style={{maxWidth:900,margin:'0 auto',padding:'2rem 1.5rem'}}>
-        {view==='results'?(
-          <ResultPanel results={results} onReset={reset}/>
-        ):(
-          <>
-            <div style={{display:'flex',gap:6,background:'#e2e8f0',borderRadius:12,padding:4,marginBottom:'1.5rem',maxWidth:700,margin:'0 auto 1.5rem'}}>
-              {navTab('screener','📡 Radar')}
-              {navTab('doi','🔗 Por DOI')}
-              {navTab('text','📝 Por Texto')}
-            </div>
-            {tab==='screener'&&<Screener onAnalyze={handleResults}/>}
-            {(tab==='doi'||tab==='text')&&<InputPanel onResult={handleResults} initialMode={tab}/>}
-          </>
-        )}
-      </div>
-    </div>
-  )
-                                                                   }
+        <div style={{maxWidth:900,margin:'0 auto',display:'flex',alignItems:'c
