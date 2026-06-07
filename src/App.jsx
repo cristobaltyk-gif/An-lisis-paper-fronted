@@ -557,4 +557,31 @@ export default function App(){
   return(
     <div style={{minHeight:'100vh',background:C.light,fontFamily:"'Georgia',serif"}}>
       <div style={{background:`linear-gradient(135deg,${C.navy} 0%,#1a4a7a 60%,#0f4c81 100%)`,padding:'1.5rem 2rem',borderBottom:'4px solid #2980b9'}}>
-        <div style={{maxWidth:900,margin:'0 auto',display:'flex',alignItems:'c
+        <div style={{maxWidth:900,margin:'0 auto',display:'flex',alignItems:'center',gap:'1rem'}}>
+          <div style={{width:44,height:44,borderRadius:10,background:'rgba(255,255,255,.14)',border:'1px solid rgba(255,255,255,.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22}}>🔬</div>
+          <div>
+            <h1 style={{margin:0,color:'#fff',fontSize:'1.4rem',fontWeight:700}}>EvidenciaMed</h1>
+            <p style={{margin:0,color:'rgba(255,255,255,.55)',fontSize:'.68rem',letterSpacing:'2px',textTransform:'uppercase'}}>Analizador Crítico de Literatura Científica · Clever Salud / ICA</p>
+          </div>
+        </div>
+      </div>
+      <div style={{maxWidth:900,margin:'0 auto',padding:'2rem 1.5rem'}}>
+        {view==='results'?(
+          <ResultPanel results={results} onReset={reset}/>
+        ):(
+          <>
+            <div style={{display:'flex',gap:6,background:'#e2e8f0',borderRadius:12,padding:4,marginBottom:'1.5rem',maxWidth:700,margin:'0 auto 1.5rem'}}>
+              {navTab('screener','📡 Radar')}
+              {navTab('topic','🔎 Por Tema')}
+              {navTab('doi','🔗 Por DOI')}
+              {navTab('text','📝 Por Texto')}
+            </div>
+            {tab==='screener'&&<Screener onAnalyze={handleResults}/>}
+            {tab==='topic'&&<TopicSearch onAnalyze={handleResults}/>}
+            {(tab==='doi'||tab==='text')&&<InputPanel onResult={handleResults} initialMode={tab}/>}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
