@@ -37,6 +37,13 @@ const OXFORD_COLOR = {'1a':C.navy,'1b':C.blue,'2a':C.blue2,'2b':'#3498db','3a':C
 const GRADE_COLOR   = {A:C.navy,B:C.blue2,C:C.orange,D:C.red}
 const QUALITY_COLOR = {Alta:C.blue,Moderada:C.teal,Baja:C.orange,'Muy baja':C.red}
 
+// Identificador único de paper, independiente de la fuente:
+// PubMed siempre trae pmid, SciELO siempre trae doi (pmid=null).
+// Fallback a title solo por seguridad extrema.
+function paperId(paper){
+  return paper.doi || paper.pmid || paper.title
+}
+
 function Badge({label,value,color}){
   return(
     <span style={{background:color,borderRadius:8,padding:'3px 10px',display:'inline-flex',alignItems:'center',gap:5}}>
@@ -73,6 +80,53 @@ function ScoreBadge({score}){
   )
 }
 
+// Badge de procedencia — PubMed vs SciELO, para distinguir a simple vista.
+function FuenteBadge({fuente}){
+  const isScielo = fuente==='scielo'
+  return(
+    <span style={{
+      background:isScielo?'#fff7ed':'#eff6ff',
+      color:isScielo?'#c2410c':'#1d4ed8',
+      border:`1px solid ${isScielo?'#fed7aa':'#bfdbfe'}`,
+      borderRadius:6,padding:'2px 8px',fontSize:'.7rem',fontWeight:700,
+      display:'inline-flex',alignItems:'center',gap:4}}>
+      {isScielo?'🇨🇱 SciELO':'🌐 PubMed'}
+    </span>
+  )
+}
+
+// Card individual de paper — reutilizada por ambas sub-pestañas.
+function PaperCard({paper,idx,isSel,onToggle}){
+  return(
+    <div onClick={onToggle}
+      style={{background:isSel?'#eff6ff':C.white,
+        border:`2px solid ${isSel?C.blue:'#e2e8f0'}`,
+        borderRadius:14,padding:'1rem',cursor:'pointer',transition:'all .15s',
+        boxShadow:isSel?'0 0 0 3px rgba(26,107,181,0.1)':'0 2px 8px rgba(0,0,0,0.04)'}}>
+      <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
+        <div style={{fontSize:'.72rem',color:C.gray,fontWeight:700,flexShrink:0,marginTop:2,width:20,textAlign:'center'}}>#{idx+1}</div>
+        <div style={{width:20,height:20,borderRadius:6,flexShrink:0,marginTop:2,
+          border:`2px solid ${isSel?C.blue:'#cbd5e1'}`,
+          background:isSel?C.blue:'transparent',
+          display:'flex',alignItems:'center',justifyContent:'center'}}>
+          {isSel&&<span style={{color:'#fff',fontSize:'.7rem',fontWeight:800}}>✓</span>}
+        </div>
+        <div style={{flex:1}}>
+          <p style={{margin:'0 0 4px',fontWeight:700,color:C.navy,fontSize:'.9rem',lineHeight:1.4}}>{paper.title}</p>
+          <p style={{margin:'0 0 8px',color:C.gray,fontSize:'.78rem'}}>{paper.authors} · <em>{paper.journal}</em> · {paper.year}</p>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+            <FuenteBadge fuente={paper.fuente}/>
+            {paper.open_access&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:6,padding:'2px 8px',fontSize:'.7rem',fontWeight:700}}>✓ Open Access</span>}
+            {paper.doi&&<span style={{background:'#e0f2fe',color:'#0369a1',borderRadius:6,padding:'2px 8px',fontSize:'.7rem',fontWeight:700}}>✓ DOI</span>}
+            {paper.pmid&&<span style={{background:'#f1f5f9',color:C.gray,borderRadius:6,padding:'2px 8px',fontSize:'.7rem'}}>PMID: {paper.pmid}</span>}
+          </div>
+        </div>
+        <ScoreBadge score={paper.score}/>
+      </div>
+    </div>
+  )
+}
+
 // ── Topic Search ──────────────────────────────────────────────────
 function TopicSearch({onAnalyze}){
   const [query,setQuery]         = useState('')
@@ -83,10 +137,11 @@ function TopicSearch({onAnalyze}){
   const [selected,setSelected]   = useState(new Set())
   const [analyzing,setAnalyzing] = useState(false)
   const [progress,setProgress]   = useState('')
+  const [sourceTab,setSourceTab] = useState('pubmed')
 
   async function handleSearch(){
     if(query.trim().length<3) return
-    setLoading(true); setError(''); setPapers([]); setSelected(new Set())
+    setLoading(true); setError(''); setPapers([]); setSelected(new Set()); setSourceTab('pubmed')
     try{
       const data = await searchByTopic(query.trim(), maxResults)
       setPapers(data.papers||[])
@@ -95,16 +150,16 @@ function TopicSearch({onAnalyze}){
     finally{ setLoading(false) }
   }
 
-  function toggleSelect(pmid){
+  function toggleSelect(id){
     setSelected(prev=>{
       const next=new Set(prev)
-      next.has(pmid)?next.delete(pmid):next.add(pmid)
+      next.has(id)?next.delete(id):next.add(id)
       return next
     })
   }
 
   async function analyzeSelected(){
-    const toAnalyze = papers.filter(p=>selected.has(p.pmid))
+    const toAnalyze = papers.filter(p=>selected.has(paperId(p)))
     if(!toAnalyze.length) return
     setAnalyzing(true)
     const list=[]
@@ -112,9 +167,17 @@ function TopicSearch({onAnalyze}){
       const paper=toAnalyze[i]
       setProgress(`Analizando ${i+1} de ${toAnalyze.length}: ${paper.title.slice(0,40)}...`)
       try{
-        const result=paper.doi
-          ? await analyzeByDoi(paper.doi)
-          : await analyzeByText(`Title: ${paper.title}\nAuthors: ${paper.authors}\nJournal: ${paper.journal} (${paper.year})\nPMID: ${paper.pmid}`)
+        // Prioridad: fulltext ya extraído (SciELO) > DOI (PubMed, vía CrossRef/Unpaywall) > metadatos sueltos.
+        const fulltext = (paper.fulltext||'').trim()
+        let result
+        if(fulltext.length>500){
+          result = await analyzeByText(fulltext, paper.doi||null)
+        }else if(paper.doi){
+          result = await analyzeByDoi(paper.doi)
+        }else{
+          const metaTexto = `Title: ${paper.title}\nAuthors: ${paper.authors}\nJournal: ${paper.journal} (${paper.year})\n${paper.pmid?`PMID: ${paper.pmid}`:''}`
+          result = await analyzeByText(metaTexto, null)
+        }
         list.push(result)
       }catch(e){ console.error(e.message) }
     }
@@ -122,24 +185,38 @@ function TopicSearch({onAnalyze}){
     if(list.length>0) onAnalyze(list)
   }
 
+  const papersPubmed = papers.filter(p=>p.fuente!=='scielo')
+  const papersScielo = papers.filter(p=>p.fuente==='scielo')
+  const visiblePapers = sourceTab==='pubmed' ? papersPubmed : papersScielo
+
   const inp={width:'100%',padding:'.75rem 1rem',boxSizing:'border-box',border:'1.5px solid #e2e8f0',borderRadius:10,fontSize:'.9rem',fontFamily:"'Georgia',serif",outline:'none',color:'#1e293b',background:C.white}
+
+  const sourceSubTab=(key,label,count)=>(
+    <button onClick={()=>setSourceTab(key)} style={{
+      flex:1,padding:'.5rem',border:'none',cursor:'pointer',borderRadius:9,
+      fontWeight:700,fontSize:'.8rem',
+      background:sourceTab===key?C.navy:'transparent',
+      color:sourceTab===key?'#fff':C.gray,transition:'all .2s'}}>
+      {label} ({count})
+    </button>
+  )
 
   return(
     <div style={{maxWidth:700,margin:'0 auto'}}>
       <div style={{background:C.white,borderRadius:16,padding:'1.25rem',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'1rem'}}>
-        <label style={{display:'block',fontWeight:700,color:C.navy,fontSize:'.85rem',marginBottom:8}}>Buscar por tema en PubMed</label>
+        <label style={{display:'block',fontWeight:700,color:C.navy,fontSize:'.85rem',marginBottom:8}}>Buscar por tema en PubMed + SciELO</label>
         <input
           value={query}
           onChange={e=>{setQuery(e.target.value);setError('')}}
           onKeyDown={e=>e.key==='Enter'&&query.trim().length>=3&&handleSearch()}
-          placeholder="ej: total hip arthroplasty ceramic bearing, knee replacement outcomes..."
+          placeholder="ej: total hip arthroplasty ceramic bearing, fractura de cadera..."
           style={inp}
           onFocus={e=>e.target.style.borderColor=C.blue2}
           onBlur={e=>e.target.style.borderColor='#e2e8f0'}
         />
         <div style={{display:'flex',alignItems:'center',gap:12,marginTop:10}}>
           <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}>
-            <label style={{color:C.gray,fontSize:'.8rem',whiteSpace:'nowrap'}}>Resultados:</label>
+            <label style={{color:C.gray,fontSize:'.8rem',whiteSpace:'nowrap'}}>Resultados por fuente:</label>
             <select value={maxResults} onChange={e=>setMax(Number(e.target.value))}
               style={{padding:'.4rem .7rem',border:'1.5px solid #e2e8f0',borderRadius:8,fontSize:'.85rem',color:'#1e293b',background:C.white,cursor:'pointer'}}>
               <option value={5}>5</option>
@@ -161,9 +238,9 @@ function TopicSearch({onAnalyze}){
 
       {papers.length>0&&(
         <>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'.75rem'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'.75rem',flexWrap:'wrap',gap:8}}>
             <p style={{margin:0,color:C.gray,fontSize:'.85rem'}}>
-              <strong style={{color:C.navy}}>{papers.length}</strong> resultados
+              <strong style={{color:C.navy}}>{papers.length}</strong> resultados totales
               {selected.size>0&&<span style={{color:C.blue,marginLeft:12}}>· {selected.size} seleccionados</span>}
             </p>
             {selected.size>0&&(
@@ -176,38 +253,26 @@ function TopicSearch({onAnalyze}){
               </button>
             )}
           </div>
-          <div style={{display:'flex',flexDirection:'column',gap:'.75rem'}}>
-            {papers.map((paper,idx)=>{
-              const isSel=selected.has(paper.pmid)
-              return(
-                <div key={paper.pmid} onClick={()=>toggleSelect(paper.pmid)}
-                  style={{background:isSel?'#eff6ff':C.white,
-                    border:`2px solid ${isSel?C.blue:'#e2e8f0'}`,
-                    borderRadius:14,padding:'1rem',cursor:'pointer',transition:'all .15s',
-                    boxShadow:isSel?'0 0 0 3px rgba(26,107,181,0.1)':'0 2px 8px rgba(0,0,0,0.04)'}}>
-                  <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
-                    <div style={{fontSize:'.72rem',color:C.gray,fontWeight:700,flexShrink:0,marginTop:2,width:20,textAlign:'center'}}>#{idx+1}</div>
-                    <div style={{width:20,height:20,borderRadius:6,flexShrink:0,marginTop:2,
-                      border:`2px solid ${isSel?C.blue:'#cbd5e1'}`,
-                      background:isSel?C.blue:'transparent',
-                      display:'flex',alignItems:'center',justifyContent:'center'}}>
-                      {isSel&&<span style={{color:'#fff',fontSize:'.7rem',fontWeight:800}}>✓</span>}
-                    </div>
-                    <div style={{flex:1}}>
-                      <p style={{margin:'0 0 4px',fontWeight:700,color:C.navy,fontSize:'.9rem',lineHeight:1.4}}>{paper.title}</p>
-                      <p style={{margin:'0 0 8px',color:C.gray,fontSize:'.78rem'}}>{paper.authors} · <em>{paper.journal}</em> · {paper.year}</p>
-                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                        {paper.open_access&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:6,padding:'2px 8px',fontSize:'.7rem',fontWeight:700}}>✓ Open Access</span>}
-                        {paper.doi&&<span style={{background:'#e0f2fe',color:'#0369a1',borderRadius:6,padding:'2px 8px',fontSize:'.7rem',fontWeight:700}}>✓ DOI</span>}
-                        <span style={{background:'#f1f5f9',color:C.gray,borderRadius:6,padding:'2px 8px',fontSize:'.7rem'}}>PMID: {paper.pmid}</span>
-                      </div>
-                    </div>
-                    <ScoreBadge score={paper.score}/>
-                  </div>
-                </div>
-              )
-            })}
+
+          <div style={{display:'flex',gap:6,background:'#f1f5f9',borderRadius:12,padding:4,marginBottom:'1rem'}}>
+            {sourceSubTab('pubmed','🌐 PubMed',papersPubmed.length)}
+            {sourceSubTab('scielo','🇨🇱 SciELO',papersScielo.length)}
           </div>
+
+          {visiblePapers.length===0?(
+            <div style={{textAlign:'center',padding:'2rem',color:C.gray,background:C.white,borderRadius:14,border:'1px dashed #e2e8f0'}}>
+              Sin resultados de {sourceTab==='pubmed'?'PubMed':'SciELO'} para este tema.
+            </div>
+          ):(
+            <div style={{display:'flex',flexDirection:'column',gap:'.75rem'}}>
+              {visiblePapers.map((paper,idx)=>{
+                const id=paperId(paper)
+                return(
+                  <PaperCard key={id} paper={paper} idx={idx} isSel={selected.has(id)} onToggle={()=>toggleSelect(id)}/>
+                )
+              })}
+            </div>
+          )}
         </>
       )}
     </div>
