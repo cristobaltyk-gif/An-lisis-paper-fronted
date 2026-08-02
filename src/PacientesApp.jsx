@@ -503,10 +503,10 @@ export default function PacientesApp() {
           }}>🌿</div>
           <div>
             <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#1a3a2a' }}>
-              Tu Salud en Simple
+              Hipokratia Aprende
             </div>
             <div style={{ fontSize: '.73rem', color: '#52B788', fontWeight: 500 }}>
-              Instituto de Cirugía Articular · Basado en evidencia científica real
+              Basado en evidencia científica real
             </div>
           </div>
           {hasStarted && (
@@ -750,7 +750,7 @@ export default function PacientesApp() {
             color: '#8ab89a',
             margin: '6px 0 0',
           }}>
-            Cada pregunta busca nueva evidencia científica · ICA Chile
+            Cada pregunta busca nueva evidencia científica
           </p>
         </div>
       )}
