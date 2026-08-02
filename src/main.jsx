@@ -1,13 +1,13 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
-import './index.css'
+import PacientesApp from './PacientesApp.jsx'
+
+const hostnamesPacientes = ['pacientes.icarticular.cl', 'aprende.hipokratia.health']
+const Root = hostnamesPacientes.includes(window.location.hostname) ? PacientesApp : App
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </React.StrictMode>,
+    <Root />
+  </React.StrictMode>
 )
