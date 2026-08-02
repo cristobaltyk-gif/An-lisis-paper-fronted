@@ -625,8 +625,8 @@ export default function App(){
         <div style={{maxWidth:900,margin:'0 auto',display:'flex',alignItems:'center',gap:'1rem'}}>
           <div style={{width:44,height:44,borderRadius:10,background:'rgba(255,255,255,.14)',border:'1px solid rgba(255,255,255,.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22}}>🔬</div>
           <div>
-            <h1 style={{margin:0,color:'#fff',fontSize:'1.4rem',fontWeight:700}}>EvidenciaMed</h1>
-            <p style={{margin:0,color:'rgba(255,255,255,.55)',fontSize:'.68rem',letterSpacing:'2px',textTransform:'uppercase'}}>Analizador Crítico de Literatura Científica · Clever Salud / ICA</p>
+            <h1 style={{margin:0,color:'#fff',fontSize:'1.4rem',fontWeight:700}}>Hipokratia Dossier</h1>
+            <p style={{margin:0,color:'rgba(255,255,255,.55)',fontSize:'.68rem',letterSpacing:'2px',textTransform:'uppercase'}}>Análisis Crítico de Literatura Científica</p>
           </div>
         </div>
       </div>
